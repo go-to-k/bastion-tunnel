@@ -1,0 +1,89 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: ECR and SSM Parameter Store
+
+# ------------------------------------------------------------#
+#  Metadata
+# ------------------------------------------------------------#
+Metadata:
+  "AWS::CloudFormation::Interface":
+    ParameterGroups:
+      - Label:
+          default: "AppName"
+        Parameters:
+          - AppName
+      - Label:
+          default: "RepositoryName"
+        Parameters:
+          - RepositoryName
+
+# ------------------------------------------------------------#
+#  Parameters
+# ------------------------------------------------------------#
+Parameters:
+  AppName:
+    Type: String
+  RepositoryName:
+    Type: String
+
+# ------------------------------------------------------------#
+#  Resources
+# ------------------------------------------------------------#
+Resources:
+  ECR:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Ref RepositoryName
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: "true"
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Delete more than 20 images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 20
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-ECR"
+
+  ManagedInstanceIDParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/ManagedInstanceIDParameter/${AppName}"
+      Type: "String"
+      Value: "ManagedInstanceIDParameter"
+      Description: "Managed Instance ID Parameter" 
+
+# ------------------------------------------------------------#
+#  Outputs
+# ------------------------------------------------------------#
+Outputs:
+  #ECRRepositoryUri:
+    # Export:
+    #   Name: !Sub "${AppName}-ECR-RepositoryUri"
+  #  Description: "ECR RepositoryUri"
+  #  Value: !GetAtt ECR.RepositoryUri #Not currently supported by AWS CloudFormation.
+
+  ECRArn:
+    Export:
+      Name: !Sub "${AppName}-ECR-Arn"
+    Description: "ECR ARN"
+    Value: !GetAtt ECR.Arn
+
+  ManagedInstanceIDParameterName:
+    Export:
+      Name: !Sub "${AppName}-SSM-ManagedInstanceIDParameterName"
+    Description: "Managed Instance ID Parameter Name"
+    Value: !Ref ManagedInstanceIDParameter

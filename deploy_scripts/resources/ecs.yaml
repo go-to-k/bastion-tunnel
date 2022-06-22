@@ -1,0 +1,553 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: ECS
+
+# ------------------------------------------------------------#
+#  Metadata
+# ------------------------------------------------------------#
+Metadata:
+  "AWS::CloudFormation::Interface":
+    ParameterGroups:
+      - Label:
+          default: "AppName"
+        Parameters:
+          - AppName
+      - Label:
+          default: "VpcID"
+        Parameters:
+          - VpcID
+      - Label:
+          default: "SubnetID1"
+        Parameters:
+          - SubnetID1
+      - Label:
+          default: "SubnetID2"
+        Parameters:
+          - SubnetID2
+      - Label:
+          default: "S3BucketNameForECSExecLogs"
+        Parameters:
+          - S3BucketNameForECSExecLogs
+      - Label:
+          default: "Fargate for ECS Configuration"
+        Parameters:
+          - ECSImageName
+          - ECSTaskCPUUnit
+          - ECSTaskMemory
+          - ECSAppTaskMemoryReservation
+          - ECSTaskDesiredCount
+          - ECSDeploymentMaximumPercent
+          - ECSDeploymentMinimumHealthyPercent
+      - Label:
+          default: "Scaling Configuration"
+        Parameters:
+          - ServiceScaleEvaluationPeriods
+          - ServiceCpuScaleOutThreshold
+          - ServiceCpuScaleInThreshold
+          - TaskMinContainerCount
+          - TaskMaxContainerCount
+          - TaskMinContainerCountDuringOffPeakTime
+          - TaskMaxContainerCountDuringOffPeakTime
+          - OffPeakStartTimeCron
+          - OffPeakEndTimeCron
+
+# ------------------------------------------------------------#
+#  Parameters
+# ------------------------------------------------------------#
+Parameters:
+  AppName:
+    Type: String
+
+  VpcID:
+    Type: String
+
+  SubnetID1:
+    Type: String
+
+  SubnetID2:
+    Type: String
+
+  S3BucketNameForECSExecLogs:
+    Type: String
+
+  ECSImageName:
+    Type: String
+
+  ECSTaskCPUUnit:
+    AllowedValues: [256, 512, 1024, 2048, 4096]
+    Type: String
+    Default: 256
+
+  ECSTaskMemory:
+    AllowedValues: [256, 512, 1024, 2048, 4096]
+    Type: String
+    Default: 512
+
+  ECSAppTaskMemoryReservation:
+    Type: Number
+    Default: 64
+
+  ECSTaskDesiredCount:
+    Type: Number
+    Default: 1
+
+  ECSDeploymentMaximumPercent:
+    Type: Number
+    Default: 200
+
+  ECSDeploymentMinimumHealthyPercent:
+    Type: Number
+    Default: 100
+
+  ServiceScaleEvaluationPeriods:
+    Type: Number
+    Default: 2
+    MinValue: 2
+
+  ServiceCpuScaleOutThreshold:
+    Type: Number
+    Description: Average CPU value to trigger auto scaling out
+    Default: 50
+    MinValue: 0
+    MaxValue: 100
+    ConstraintDescription: Value must be between 0 and 100
+
+  ServiceCpuScaleInThreshold:
+    Type: Number
+    Description: Average CPU value to trigger auto scaling in
+    Default: 25
+    MinValue: 0
+    MaxValue: 100
+    ConstraintDescription: Value must be between 0 and 100
+
+  TaskMinContainerCount:
+    Type: Number
+    Description: Minimum number of containers to run for the service
+    Default: 1
+    MinValue: 0
+    ConstraintDescription: Value must be >= 0
+
+  TaskMaxContainerCount:
+    Type: Number
+    Description: Maximum number of containers to run for the service when auto scaling out
+    Default: 2
+    MinValue: 0
+    ConstraintDescription: Value must be >= 0
+
+  TaskMinContainerCountDuringOffPeakTime:
+    Type: Number
+    Description: Minimum number of containers to run for the service during OffPeak time
+    Default: 1
+    MinValue: 0
+    ConstraintDescription: Value must be >= 0
+
+  TaskMaxContainerCountDuringOffPeakTime:
+    Type: Number
+    Description: Maximum number of containers to run for the service during OffPeak time
+    Default: 1
+    MinValue: 0
+    ConstraintDescription: Value must be >= 0
+
+  OffPeakStartTimeCron:
+    Type: String
+
+  OffPeakEndTimeCron:
+    Type: String
+
+# ------------------------------------------------------------#
+#  Resources
+# ------------------------------------------------------------#
+Resources:
+  # ------------------------------------------------------------#
+  #  Security Group
+  # ------------------------------------------------------------#
+  ECSServiceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VpcID
+      GroupName: !Sub "${AppName}-ECS-sg"
+      GroupDescription: "ECS security group"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AppName}-ECS-sg"
+
+  # ------------------------------------------------------------#
+  # ECS Cluster
+  # ------------------------------------------------------------#
+  ECSCluster:
+    Type: "AWS::ECS::Cluster"
+    Properties:
+      ClusterName: !Sub "${AppName}-Cluster"
+      Configuration:
+        ExecuteCommandConfiguration:
+          LogConfiguration:
+            CloudWatchLogGroupName: !Ref EcsExecLogGroup
+            S3BucketName: !Ref S3BucketNameForECSExecLogs
+          Logging: OVERRIDE
+      ClusterSettings:
+        - Name: containerInsights
+          Value: disabled
+
+  # ------------------------------------------------------------#
+  #  ECS LogGroup
+  # ------------------------------------------------------------#
+  ECSLogGroup:
+    Type: "AWS::Logs::LogGroup"
+    Properties:
+      LogGroupName: !Sub "/ecs/logs/${AppName}"
+
+  # ------------------------------------------------------------#
+  #  ECS Exec LogGroup
+  # ------------------------------------------------------------#
+  EcsExecLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs-exec/logs/${AppName}"
+
+  # ------------------------------------------------------------#
+  #  ECS Exec Log Bucket
+  # ------------------------------------------------------------#
+  EcsExecLogBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref S3BucketNameForECSExecLogs
+      AccessControl: Private
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+# ------------------------------------------------------------#
+#  SSM Service Role
+# ------------------------------------------------------------#
+  SSMServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AppName}-SSMServiceRole"
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ssm.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: !Sub "${AppName}-SSMServiceRole-DeregisterManagedInstance-Policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "ssm:DeregisterManagedInstance"
+                Resource: "*"
+
+# ------------------------------------------------------------#
+#  ECS Task Execution Role
+# ------------------------------------------------------------#
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AppName}-ECSTaskExecutionRole"
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+# ------------------------------------------------------------#
+#  ECS Task Role
+# ------------------------------------------------------------#
+  ECSTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AppName}-ECSTaskRole"
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub "${AppName}-SessionManager-SSM-Policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "ssm:DeleteActivation"
+                  - "ssm:RemoveTagsFromResource"
+                  - "ssm:AddTagsToResource"
+                  - "ssm:CreateActivation"
+                  - "ssm:DeregisterManagedInstance"
+                Resource: "*"
+        - PolicyName: !Sub "${AppName}-ParameterStore-SSM-Policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "ssm:PutParameter"
+                  - "ssm:GetParameter*"
+                  - "ssm:DescribeParameters"
+                Resource: "*"
+        - PolicyName: !Sub "${AppName}-SessionManager-PassRole-Policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "iam:PassRole"
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: "ssm.amazonaws.com"
+        - PolicyName: !Sub "${AppName}-ECSExec-SSM-Policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "ssmmessages:CreateControlChannel"
+                  - "ssmmessages:CreateDataChannel"
+                  - "ssmmessages:OpenControlChannel"
+                  - "ssmmessages:OpenDataChannel"
+                Resource: "*"
+        - PolicyName: !Sub "${AppName}-ECSExec-Logging-Policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "logs:DescribeLogGroups"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "logs:DescribeLogStreams"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: !GetAtt EcsExecLogGroup.Arn
+              - Effect: Allow
+                Action:
+                  - "s3:PutObject"
+                Resource: !Sub 'arn:aws:s3:::${EcsExecLogBucket}/*'
+              - Effect: Allow
+                Action:
+                  - "s3:GetBucketLocation"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "s3:GetEncryptionConfiguration"
+                Resource: !Sub 'arn:aws:s3:::${EcsExecLogBucket}'
+
+  # ------------------------------------------------------------#
+  #  ECS TaskDefinition
+  # ------------------------------------------------------------#
+  ECSTaskDefinition:
+    Type: "AWS::ECS::TaskDefinition"
+    Properties:
+      Cpu: !Ref ECSTaskCPUUnit
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskRole.Arn
+      Family: !Sub "${AppName}-Task"
+      Memory: !Ref ECSTaskMemory
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ContainerDefinitions:
+        - Name: !Sub "${AppName}-Container"
+          Image: !Ref ECSImageName
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref ECSLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: !Sub "${AppName}"
+          MemoryReservation: !Ref ECSAppTaskMemoryReservation
+          PortMappings:
+            - Protocol: tcp
+              ContainerPort: 80
+          Environment:
+            - Name: APP_NAME
+              Value: !Ref AppName
+
+  # ------------------------------------------------------------#
+  #  ECS Service
+  # ------------------------------------------------------------#
+  ECSService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref ECSCluster
+      DesiredCount: !Ref ECSTaskDesiredCount
+      DeploymentConfiguration:
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+        MaximumPercent: !Ref ECSDeploymentMaximumPercent
+        MinimumHealthyPercent: !Ref ECSDeploymentMinimumHealthyPercent
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          SecurityGroups:
+            - !Ref ECSServiceSecurityGroup
+          Subnets:
+            - !Ref SubnetID1
+            - !Ref SubnetID2
+      ServiceName: !Sub "${AppName}-Service"
+      TaskDefinition: !Ref ECSTaskDefinition
+      EnableExecuteCommand: true
+
+  # ------------------------------------------------------------#
+  #  Auto Scaling Service
+  # ------------------------------------------------------------#
+  ServiceAutoScalingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: application-autoscaling.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: !Sub "${AppName}-Container-autoscaling"
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - application-autoscaling:*
+                  - cloudwatch:DescribeAlarms
+                  - cloudwatch:PutMetricAlarm
+                  - ecs:DescribeServices
+                  - ecs:UpdateService
+                Resource: "*"
+
+  ServiceScalingTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn:
+      - ECSService
+    Properties:
+      MinCapacity: !Ref TaskMinContainerCount
+      MaxCapacity: !Ref TaskMaxContainerCount
+      ResourceId: !Sub
+        - service/${EcsClusterName}/${EcsDefaultServiceName}
+        - EcsClusterName: !Ref ECSCluster
+          EcsDefaultServiceName: !Sub "${AppName}-Service"
+      RoleARN: !GetAtt ServiceAutoScalingRole.Arn
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+      ScheduledActions:
+        - ScheduledActionName: OffPeakStartTime
+          Schedule: !Ref OffPeakStartTimeCron
+          Timezone: "Asia/Tokyo"
+          ScalableTargetAction:
+            MinCapacity: !Ref TaskMinContainerCountDuringOffPeakTime
+            MaxCapacity: !Ref TaskMaxContainerCountDuringOffPeakTime
+        - ScheduledActionName: OffPeakEndTime
+          Schedule: !Ref OffPeakEndTimeCron
+          Timezone: "Asia/Tokyo"
+          ScalableTargetAction:
+            MinCapacity: !Ref TaskMinContainerCount
+            MaxCapacity: !Ref TaskMaxContainerCount
+
+  ServiceScaleOutPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${AppName}-Service-ScaleOutPolicy"
+      PolicyType: StepScaling
+      ScalingTargetId: !Ref ServiceScalingTarget
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ChangeInCapacity
+        Cooldown: 60
+        MetricAggregationType: Average
+        StepAdjustments:
+          - ScalingAdjustment: 1
+            MetricIntervalLowerBound: 0
+
+  ServiceScaleInPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${AppName}-Service-ScaleInPolicy"
+      PolicyType: StepScaling
+      ScalingTargetId: !Ref ServiceScalingTarget
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ChangeInCapacity
+        Cooldown: 300
+        MetricAggregationType: Average
+        StepAdjustments:
+          - ScalingAdjustment: -1
+            MetricIntervalUpperBound: 0
+
+  ServiceScaleOutAlarm:
+    Type: AWS::CloudWatch::Alarm
+    DependsOn:
+      - ECSService
+    Properties:
+      AlarmName: !Sub "${AppName}-Service-ScaleOutAlarm"
+      EvaluationPeriods: !Ref ServiceScaleEvaluationPeriods
+      Statistic: Average
+      TreatMissingData: notBreaching
+      Threshold: !Ref ServiceCpuScaleOutThreshold
+      AlarmDescription: Alarm to add capacity if CPU is high
+      Period: 60
+      AlarmActions:
+        - !Ref ServiceScaleOutPolicy
+      Namespace: AWS/ECS
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref ECSCluster
+        - Name: ServiceName
+          Value: !Sub "${AppName}-Service"
+      ComparisonOperator: GreaterThanThreshold
+      MetricName: CPUUtilization
+
+  ServiceScaleInAlarm:
+    Type: AWS::CloudWatch::Alarm
+    DependsOn:
+      - ECSService
+    Properties:
+      AlarmName: !Sub "${AppName}-Service-ScaleInAlarm"
+      EvaluationPeriods: !Ref ServiceScaleEvaluationPeriods
+      Statistic: Average
+      TreatMissingData: notBreaching
+      Threshold: !Ref ServiceCpuScaleInThreshold
+      AlarmDescription: Alarm to reduce capacity if container CPU is low
+      Period: 300
+      AlarmActions:
+        - !Ref ServiceScaleInPolicy
+      Namespace: AWS/ECS
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref ECSCluster
+        - Name: ServiceName
+          Value: !Sub "${AppName}-Service"
+      ComparisonOperator: LessThanThreshold
+      MetricName: CPUUtilization
+
+# ------------------------------------------------------------#
+#  Outputs
+# ------------------------------------------------------------#
+Outputs:
+  ECSServiceArn:
+    Export:
+      Name: !Sub "${AppName}-ECSService-Arn"
+    Value: !Ref ECSService
+
+  ECSClusterArn:
+    Export:
+      Name: !Sub "${AppName}-ECSCluster-Arn"
+    Value: !GetAtt ECSCluster.Arn

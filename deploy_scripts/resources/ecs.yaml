@@ -37,18 +37,6 @@ Metadata:
           - ECSTaskDesiredCount
           - ECSDeploymentMaximumPercent
           - ECSDeploymentMinimumHealthyPercent
-      - Label:
-          default: "Scaling Configuration"
-        Parameters:
-          - ServiceScaleEvaluationPeriods
-          - ServiceCpuScaleOutThreshold
-          - ServiceCpuScaleInThreshold
-          - TaskMinContainerCount
-          - TaskMaxContainerCount
-          - TaskMinContainerCountDuringOffPeakTime
-          - TaskMaxContainerCountDuringOffPeakTime
-          - OffPeakStartTimeCron
-          - OffPeakEndTimeCron
 
 # ------------------------------------------------------------#
 #  Parameters
@@ -97,61 +85,6 @@ Parameters:
   ECSDeploymentMinimumHealthyPercent:
     Type: Number
     Default: 100
-
-  ServiceScaleEvaluationPeriods:
-    Type: Number
-    Default: 2
-    MinValue: 2
-
-  ServiceCpuScaleOutThreshold:
-    Type: Number
-    Description: Average CPU value to trigger auto scaling out
-    Default: 50
-    MinValue: 0
-    MaxValue: 100
-    ConstraintDescription: Value must be between 0 and 100
-
-  ServiceCpuScaleInThreshold:
-    Type: Number
-    Description: Average CPU value to trigger auto scaling in
-    Default: 25
-    MinValue: 0
-    MaxValue: 100
-    ConstraintDescription: Value must be between 0 and 100
-
-  TaskMinContainerCount:
-    Type: Number
-    Description: Minimum number of containers to run for the service
-    Default: 1
-    MinValue: 0
-    ConstraintDescription: Value must be >= 0
-
-  TaskMaxContainerCount:
-    Type: Number
-    Description: Maximum number of containers to run for the service when auto scaling out
-    Default: 2
-    MinValue: 0
-    ConstraintDescription: Value must be >= 0
-
-  TaskMinContainerCountDuringOffPeakTime:
-    Type: Number
-    Description: Minimum number of containers to run for the service during OffPeak time
-    Default: 1
-    MinValue: 0
-    ConstraintDescription: Value must be >= 0
-
-  TaskMaxContainerCountDuringOffPeakTime:
-    Type: Number
-    Description: Maximum number of containers to run for the service during OffPeak time
-    Default: 1
-    MinValue: 0
-    ConstraintDescription: Value must be >= 0
-
-  OffPeakStartTimeCron:
-    Type: String
-
-  OffPeakEndTimeCron:
-    Type: String
 
 # ------------------------------------------------------------#
 #  Resources
@@ -377,9 +310,6 @@ Resources:
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: !Sub "${AppName}"
           MemoryReservation: !Ref ECSAppTaskMemoryReservation
-          PortMappings:
-            - Protocol: tcp
-              ContainerPort: 80
           Environment:
             - Name: APP_NAME
               Value: !Ref AppName
@@ -409,134 +339,6 @@ Resources:
       ServiceName: !Sub "${AppName}-Service"
       TaskDefinition: !Ref ECSTaskDefinition
       EnableExecuteCommand: true
-
-  # ------------------------------------------------------------#
-  #  Auto Scaling Service
-  # ------------------------------------------------------------#
-  ServiceAutoScalingRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: application-autoscaling.amazonaws.com
-            Action: sts:AssumeRole
-      Path: /
-      Policies:
-        - PolicyName: !Sub "${AppName}-Container-autoscaling"
-          PolicyDocument:
-            Statement:
-              - Effect: Allow
-                Action:
-                  - application-autoscaling:*
-                  - cloudwatch:DescribeAlarms
-                  - cloudwatch:PutMetricAlarm
-                  - ecs:DescribeServices
-                  - ecs:UpdateService
-                Resource: "*"
-
-  ServiceScalingTarget:
-    Type: AWS::ApplicationAutoScaling::ScalableTarget
-    DependsOn:
-      - ECSService
-    Properties:
-      MinCapacity: !Ref TaskMinContainerCount
-      MaxCapacity: !Ref TaskMaxContainerCount
-      ResourceId: !Sub
-        - service/${EcsClusterName}/${EcsDefaultServiceName}
-        - EcsClusterName: !Ref ECSCluster
-          EcsDefaultServiceName: !Sub "${AppName}-Service"
-      RoleARN: !GetAtt ServiceAutoScalingRole.Arn
-      ScalableDimension: ecs:service:DesiredCount
-      ServiceNamespace: ecs
-      ScheduledActions:
-        - ScheduledActionName: OffPeakStartTime
-          Schedule: !Ref OffPeakStartTimeCron
-          Timezone: "Asia/Tokyo"
-          ScalableTargetAction:
-            MinCapacity: !Ref TaskMinContainerCountDuringOffPeakTime
-            MaxCapacity: !Ref TaskMaxContainerCountDuringOffPeakTime
-        - ScheduledActionName: OffPeakEndTime
-          Schedule: !Ref OffPeakEndTimeCron
-          Timezone: "Asia/Tokyo"
-          ScalableTargetAction:
-            MinCapacity: !Ref TaskMinContainerCount
-            MaxCapacity: !Ref TaskMaxContainerCount
-
-  ServiceScaleOutPolicy:
-    Type: AWS::ApplicationAutoScaling::ScalingPolicy
-    Properties:
-      PolicyName: !Sub "${AppName}-Service-ScaleOutPolicy"
-      PolicyType: StepScaling
-      ScalingTargetId: !Ref ServiceScalingTarget
-      StepScalingPolicyConfiguration:
-        AdjustmentType: ChangeInCapacity
-        Cooldown: 60
-        MetricAggregationType: Average
-        StepAdjustments:
-          - ScalingAdjustment: 1
-            MetricIntervalLowerBound: 0
-
-  ServiceScaleInPolicy:
-    Type: AWS::ApplicationAutoScaling::ScalingPolicy
-    Properties:
-      PolicyName: !Sub "${AppName}-Service-ScaleInPolicy"
-      PolicyType: StepScaling
-      ScalingTargetId: !Ref ServiceScalingTarget
-      StepScalingPolicyConfiguration:
-        AdjustmentType: ChangeInCapacity
-        Cooldown: 300
-        MetricAggregationType: Average
-        StepAdjustments:
-          - ScalingAdjustment: -1
-            MetricIntervalUpperBound: 0
-
-  ServiceScaleOutAlarm:
-    Type: AWS::CloudWatch::Alarm
-    DependsOn:
-      - ECSService
-    Properties:
-      AlarmName: !Sub "${AppName}-Service-ScaleOutAlarm"
-      EvaluationPeriods: !Ref ServiceScaleEvaluationPeriods
-      Statistic: Average
-      TreatMissingData: notBreaching
-      Threshold: !Ref ServiceCpuScaleOutThreshold
-      AlarmDescription: Alarm to add capacity if CPU is high
-      Period: 60
-      AlarmActions:
-        - !Ref ServiceScaleOutPolicy
-      Namespace: AWS/ECS
-      Dimensions:
-        - Name: ClusterName
-          Value: !Ref ECSCluster
-        - Name: ServiceName
-          Value: !Sub "${AppName}-Service"
-      ComparisonOperator: GreaterThanThreshold
-      MetricName: CPUUtilization
-
-  ServiceScaleInAlarm:
-    Type: AWS::CloudWatch::Alarm
-    DependsOn:
-      - ECSService
-    Properties:
-      AlarmName: !Sub "${AppName}-Service-ScaleInAlarm"
-      EvaluationPeriods: !Ref ServiceScaleEvaluationPeriods
-      Statistic: Average
-      TreatMissingData: notBreaching
-      Threshold: !Ref ServiceCpuScaleInThreshold
-      AlarmDescription: Alarm to reduce capacity if container CPU is low
-      Period: 300
-      AlarmActions:
-        - !Ref ServiceScaleInPolicy
-      Namespace: AWS/ECS
-      Dimensions:
-        - Name: ClusterName
-          Value: !Ref ECSCluster
-        - Name: ServiceName
-          Value: !Sub "${AppName}-Service"
-      ComparisonOperator: LessThanThreshold
-      MetricName: CPUUtilization
 
 # ------------------------------------------------------------#
 #  Outputs

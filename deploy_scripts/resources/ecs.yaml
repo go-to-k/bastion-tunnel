@@ -377,9 +377,6 @@ Resources:
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: !Sub "${AppName}"
           MemoryReservation: !Ref ECSAppTaskMemoryReservation
-          PortMappings:
-            - Protocol: tcp
-              ContainerPort: 80
           Environment:
             - Name: APP_NAME
               Value: !Ref AppName

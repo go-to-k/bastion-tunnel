@@ -59,16 +59,34 @@ function deployECS {
 		|| [ -z "${ECSTaskMemory:-}" ] \
 		|| [ -z "${ECSRestMemory:-}" ] \
 		|| [ -z "${ECSTaskDesiredCount:-}" ] \
+		|| [ -z "${TaskMinContainerCount:-}" ] \
+		|| [ -z "${TaskMaxContainerCount:-}" ] \
+		|| [ -z "${TaskMinContainerCountDuringOffPeakTime:-}" ] \
+		|| [ -z "${TaskMaxContainerCountDuringOffPeakTime:-}" ] \
+		|| [ -z "${OffPeakStartTimeCron:-}" ] \
+		|| [ -z "${OffPeakEndTimeCron:-}" ] \
 		|| [ -z "${ECSDeploymentMaximumPercent:-}" ] \
-		|| [ -z "${ECSDeploymentMinimumHealthyPercent:-}" ]; then
+		|| [ -z "${ECSDeploymentMinimumHealthyPercent:-}" ] \
+		|| [ -z "${ServiceScaleEvaluationPeriods:-}" ] \
+		|| [ -z "${ServiceCpuScaleOutThreshold:-}" ] \
+		|| [ -z "${ServiceCpuScaleInThreshold:-}" ]; then
 		echo "コンフィグファイルに設定漏れがあります"
 
 		echo "ECSTaskCPUUnit: ${ECSTaskCPUUnit:-}"
 		echo "ECSTaskMemory: ${ECSTaskMemory:-}"
 		echo "ECSRestMemory: ${ECSRestMemory:-}"
 		echo "ECSTaskDesiredCount: ${ECSTaskDesiredCount:-}"
+		echo "TaskMinContainerCount: ${TaskMinContainerCount:-}"
+		echo "TaskMaxContainerCount: ${TaskMaxContainerCount:-}"
+		echo "TaskMinContainerCountDuringOffPeakTime: ${TaskMinContainerCountDuringOffPeakTime:-}"
+		echo "TaskMaxContainerCountDuringOffPeakTime: ${TaskMaxContainerCountDuringOffPeakTime:-}"
+		echo "OffPeakStartTimeCron: ${OffPeakStartTimeCron:-}"
+		echo "OffPeakEndTimeCron: ${OffPeakEndTimeCron:-}"
 		echo "ECSDeploymentMaximumPercent: ${ECSDeploymentMaximumPercent:-}"
 		echo "ECSDeploymentMinimumHealthyPercent: ${ECSDeploymentMinimumHealthyPercent:-}"
+		echo "ServiceScaleEvaluationPeriods: ${ServiceScaleEvaluationPeriods:-}"
+		echo "ServiceCpuScaleOutThreshold: ${ServiceCpuScaleOutThreshold:-}"
+		echo "ServiceCpuScaleInThreshold: ${ServiceCpuScaleInThreshold:-}"
 
 		return 1
 	fi
@@ -115,6 +133,15 @@ function deployECS {
 		ECSTaskDesiredCount=${ECSTaskDesiredCount} \
 		ECSDeploymentMaximumPercent=${ECSDeploymentMaximumPercent} \
 		ECSDeploymentMinimumHealthyPercent=${ECSDeploymentMinimumHealthyPercent} \
+		ServiceScaleEvaluationPeriods=${ServiceScaleEvaluationPeriods} \
+		ServiceCpuScaleOutThreshold=${ServiceCpuScaleOutThreshold} \
+		ServiceCpuScaleInThreshold=${ServiceCpuScaleInThreshold} \
+		TaskMinContainerCount=${TaskMinContainerCount} \
+		TaskMaxContainerCount=${TaskMaxContainerCount} \
+		TaskMinContainerCountDuringOffPeakTime=${TaskMinContainerCountDuringOffPeakTime} \
+		TaskMaxContainerCountDuringOffPeakTime=${TaskMaxContainerCountDuringOffPeakTime} \
+		OffPeakStartTimeCron="${OffPeakStartTimeCron}" \
+		OffPeakEndTimeCron="${OffPeakEndTimeCron}" \
 		S3BucketNameForECSExecLogs=${s3BucketNameForECSExecLogs} \
 		${profileOption}
 }

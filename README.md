@@ -1,5 +1,7 @@
 # bastion-tunnel
 
+解説記事をブログに載せております。→[ECS FargateでSSMセッションマネージャーのリモートホストのポートフォワード環境を構築する](https://go-to-k.hatenablog.com/entry/ecs-fargate-ssm-remote-port-forward)
+
 ## 【概要】
 
 AWSのサブネット(プライベート含む)内にあるリソースに、**リモートホストへのポートフォワード**を通して、ローカルPC(Mac)から直接アクセス(トンネリング)するためのツール。

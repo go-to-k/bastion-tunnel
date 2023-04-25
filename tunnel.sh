@@ -20,21 +20,21 @@ TUNNEL_LOG_FILE_PATH="${TUNNEL_LOG_DIR_PATH}/$(date +%Y_%m%d_%H%M%S).log"
 
 while getopts p:l:t:h:r: OPT; do
 	case $OPT in
-		p)
-			PROFILE="$OPTARG"
-			;;
-		l)
-			LOCAL_DB_PORT="$OPTARG"
-			;;
-		t)
-			TARGET_DB_PORT="$OPTARG"
-			;;
-		h)
-			TARGET_HOST="$OPTARG"
-			;;
-		r)
-			REGION="$OPTARG"
-			;;
+	p)
+		PROFILE="$OPTARG"
+		;;
+	l)
+		LOCAL_DB_PORT="$OPTARG"
+		;;
+	t)
+		TARGET_DB_PORT="$OPTARG"
+		;;
+	h)
+		TARGET_HOST="$OPTARG"
+		;;
+	r)
+		REGION="$OPTARG"
+		;;
 	esac
 done
 
@@ -51,13 +51,14 @@ fi
 profileOption=""
 
 if [ -n "${PROFILE}" ]; then
-	profileOption="--profile ${profile}"
+	profileOption="--profile ${PROFILE}"
 fi
 
-target=$(aws ssm get-parameters \
-	--name "${SSM_PARAMETER_NAME}" \
-	${profileOption} \
-	| jq -r .Parameters[0].Value \
+target=$(
+	aws ssm get-parameters \
+		--name "${SSM_PARAMETER_NAME}" \
+		${profileOption} |
+		jq -r .Parameters[0].Value
 )
 
 parameters="{\"host\":[\"${TARGET_HOST}\"],\"portNumber\":[\"${TARGET_DB_PORT}\"], \"localPortNumber\":[\"${LOCAL_DB_PORT}\"]}"
@@ -69,10 +70,10 @@ echo "30分経つと接続が切れます。"
 
 aws ssm start-session \
 	--target ${target} \
-    --document-name AWS-StartPortForwardingSessionToRemoteHost \
-    --parameters "${parameters}" \
+	--document-name AWS-StartPortForwardingSessionToRemoteHost \
+	--parameters "${parameters}" \
 	--region ${REGION} \
-	${profileOption} > ${TUNNEL_LOG_FILE_PATH} &
+	${profileOption} >${TUNNEL_LOG_FILE_PATH} &
 
 # 1日経ったログは消す
-find ${TUNNEL_LOG_DIR_PATH} -type f -mtime +1 | xargs rm 
+find ${TUNNEL_LOG_DIR_PATH} -type f -mtime +1 | xargs rm

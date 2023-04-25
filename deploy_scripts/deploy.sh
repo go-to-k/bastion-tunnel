@@ -9,12 +9,12 @@ PROFILE=""
 
 while getopts p:d: OPT; do
 	case $OPT in
-		p)
-			PROFILE="$OPTARG"
-			;;
-		d)
-			DEPLOYMODE="$OPTARG"
-			;;
+	p)
+		PROFILE="$OPTARG"
+		;;
+	d)
+		DEPLOYMODE="$OPTARG"
+		;;
 	esac
 done
 
@@ -28,7 +28,7 @@ fi
 PROFILE_OPTION=""
 
 if [ -n "${PROFILE}" ]; then
-	PROFILE_OPTION="--profile ${PROFILE}"
+	PROFILE_OPTION="-p ${PROFILE}"
 fi
 
 bash ./deploy_scripts/scripts/01_deploy_preparation.sh ${PROFILE_OPTION} -d ${DEPLOYMODE}

@@ -12,9 +12,9 @@ REGION="ap-northeast-1"
 
 while getopts p: OPT; do
 	case $OPT in
-		p)
-			PROFILE="$OPTARG"
-			;;
+	p)
+		PROFILE="$OPTARG"
+		;;
 	esac
 done
 
@@ -22,7 +22,7 @@ function buildECS {
 	local profileOption=""
 
 	if [ -n "${1:-}" ]; then
-		profileOption="--profile ${profile}"
+		profileOption="--profile ${1}"
 	fi
 
 	#### docker build & push
@@ -46,12 +46,11 @@ function buildECS {
 
 	docker tag ${repositoryName}:latest ${repositoryUri}:${ecrTag}
 
-
 	### Dockle
 	local dockleVersion=$(
-		curl --silent "https://api.github.com/repos/goodwithtech/dockle/releases/latest" | \
-		grep '"tag_name":' | \
-		sed -E 's/.*"v([^"]+)".*/\1/' \
+		curl --silent "https://api.github.com/repos/goodwithtech/dockle/releases/latest" |
+			grep '"tag_name":' |
+			sed -E 's/.*"v([^"]+)".*/\1/'
 	)
 
 	docker run \

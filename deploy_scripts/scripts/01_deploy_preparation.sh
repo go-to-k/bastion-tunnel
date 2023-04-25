@@ -16,12 +16,12 @@ REGION="ap-northeast-1"
 
 while getopts p:d: OPT; do
 	case $OPT in
-		p)
-			PROFILE="$OPTARG"
-			;;
-		d)
-			DEPLOYMODE="$OPTARG"
-			;;
+	p)
+		PROFILE="$OPTARG"
+		;;
+	d)
+		DEPLOYMODE="$OPTARG"
+		;;
 	esac
 done
 
@@ -36,12 +36,11 @@ function deployPreparation {
 	local profileOption=""
 
 	if [ -n "${1:-}" ]; then
-		profileOption="--profile ${profile}"
+		profileOption="--profile ${1}"
 	fi
 
 	local repositoryName=$(echo "${APPNAME}-ECR" | tr '[:upper:]' '[:lower:]')
 	local stackName="${APPNAME}-Preparation"
-
 
 	local changesetOption="--no-execute-changeset"
 
@@ -73,11 +72,11 @@ function deployPreparation {
 				${profileOption}
 		fi
 
-		local documentCount=$( \
+		local documentCount=$(
 			aws ssm list-documents \
 				--filters Key=Name,Values=SSM-SessionManagerRunShell \
-				${profileOption} \
-			| jq '.DocumentIdentifiers|length' \
+				${profileOption} |
+				jq '.DocumentIdentifiers|length'
 		)
 
 		if [ ${documentCount} -eq 0 ]; then
@@ -85,19 +84,19 @@ function deployPreparation {
 				--name "SSM-SessionManagerRunShell" \
 				--content "file://${SESSION_MANAGER_RUN_SHELL_CONTENT_PATH}" \
 				--document-type "Session" \
-				${profileOption} > /dev/null
+				${profileOption} >/dev/null
 		else
-			local currentSessionManagerRunShellDocument=$( \
+			local currentSessionManagerRunShellDocument=$(
 				aws ssm get-document \
 					--name "SSM-SessionManagerRunShell" \
 					--document-version \$LATEST \
-					${profileOption} \
-				| jq -r .Content \
-				| jq -c . \
+					${profileOption} |
+					jq -r .Content |
+					jq -c .
 			)
-			local newSessionManagerRunShellDocument=$( \
-				cat "${SESSION_MANAGER_RUN_SHELL_CONTENT_PATH}" \
-				| jq -c '.' \
+			local newSessionManagerRunShellDocument=$(
+				cat "${SESSION_MANAGER_RUN_SHELL_CONTENT_PATH}" |
+					jq -c '.'
 			)
 
 			if [ "${currentSessionManagerRunShellDocument}" != "${newSessionManagerRunShellDocument}" ]; then
@@ -105,7 +104,7 @@ function deployPreparation {
 					--name "SSM-SessionManagerRunShell" \
 					--content "file://${SESSION_MANAGER_RUN_SHELL_CONTENT_PATH}" \
 					--document-version "\$LATEST" \
-					${profileOption} > /dev/null
+					${profileOption} >/dev/null
 			fi
 		fi
 	fi

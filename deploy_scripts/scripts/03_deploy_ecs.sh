@@ -20,12 +20,12 @@ SUBNET_ID2="subnet-*****************"
 
 while getopts p:d: OPT; do
 	case $OPT in
-		p)
-			PROFILE="$OPTARG"
-			;;
-		d)
-			DEPLOYMODE="$OPTARG"
-			;;
+	p)
+		PROFILE="$OPTARG"
+		;;
+	d)
+		DEPLOYMODE="$OPTARG"
+		;;
 	esac
 done
 
@@ -40,11 +40,10 @@ function deployECS {
 	local profileOption=""
 
 	if [ -n "${1:-}" ]; then
-		profileOption="--profile ${profile}"
+		profileOption="--profile ${1}"
 	fi
 
 	local stackName="${APPNAME}-ECS"
-
 
 	if ! [ -f "${CONFIG_FILE_NAME}" ]; then
 		echo "====================================="
@@ -55,21 +54,21 @@ function deployECS {
 
 	source "${CONFIG_FILE_NAME}"
 
-	if [ -z "${ECSTaskCPUUnit:-}" ] \
-		|| [ -z "${ECSTaskMemory:-}" ] \
-		|| [ -z "${ECSRestMemory:-}" ] \
-		|| [ -z "${ECSTaskDesiredCount:-}" ] \
-		|| [ -z "${TaskMinContainerCount:-}" ] \
-		|| [ -z "${TaskMaxContainerCount:-}" ] \
-		|| [ -z "${TaskMinContainerCountDuringOffPeakTime:-}" ] \
-		|| [ -z "${TaskMaxContainerCountDuringOffPeakTime:-}" ] \
-		|| [ -z "${OffPeakStartTimeCron:-}" ] \
-		|| [ -z "${OffPeakEndTimeCron:-}" ] \
-		|| [ -z "${ECSDeploymentMaximumPercent:-}" ] \
-		|| [ -z "${ECSDeploymentMinimumHealthyPercent:-}" ] \
-		|| [ -z "${ServiceScaleEvaluationPeriods:-}" ] \
-		|| [ -z "${ServiceCpuScaleOutThreshold:-}" ] \
-		|| [ -z "${ServiceCpuScaleInThreshold:-}" ]; then
+	if [ -z "${ECSTaskCPUUnit:-}" ] ||
+		[ -z "${ECSTaskMemory:-}" ] ||
+		[ -z "${ECSRestMemory:-}" ] ||
+		[ -z "${ECSTaskDesiredCount:-}" ] ||
+		[ -z "${TaskMinContainerCount:-}" ] ||
+		[ -z "${TaskMaxContainerCount:-}" ] ||
+		[ -z "${TaskMinContainerCountDuringOffPeakTime:-}" ] ||
+		[ -z "${TaskMaxContainerCountDuringOffPeakTime:-}" ] ||
+		[ -z "${OffPeakStartTimeCron:-}" ] ||
+		[ -z "${OffPeakEndTimeCron:-}" ] ||
+		[ -z "${ECSDeploymentMaximumPercent:-}" ] ||
+		[ -z "${ECSDeploymentMinimumHealthyPercent:-}" ] ||
+		[ -z "${ServiceScaleEvaluationPeriods:-}" ] ||
+		[ -z "${ServiceCpuScaleOutThreshold:-}" ] ||
+		[ -z "${ServiceCpuScaleInThreshold:-}" ]; then
 		echo "コンフィグファイルに設定漏れがあります"
 
 		echo "ECSTaskCPUUnit: ${ECSTaskCPUUnit:-}"
@@ -91,7 +90,6 @@ function deployECS {
 		return 1
 	fi
 
-
 	#### docker build & push
 	local repositoryName=$(echo "${APPNAME}-ECR" | tr '[:upper:]' '[:lower:]')
 	local accountId=$(aws sts get-caller-identity --query "Account" --output text ${profileOption})
@@ -105,7 +103,6 @@ function deployECS {
 	local ecsAppTaskMemoryReservation=$(expr ${ECSTaskMemory} - ${ECSRestMemory})
 
 	local s3BucketNameForECSExecLogs=$(echo "ecs-exec-logs-${APPNAME}-${accountId}" | tr '[:upper:]' '[:lower:]')
-
 
 	local changesetOption="--no-execute-changeset"
 
